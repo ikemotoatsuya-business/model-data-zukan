@@ -1,0 +1,48 @@
+# 公開用リポジトリ（例：model-data-zukan、Public）の .github/workflows/pages.yml に置く。
+# 台帳のリポジトリ research-catalog（Private）を読み取り専用のトークンで取得し、
+# scripts/build_site.py でページを書き出して、この公開用リポジトリの GitHub Pages に公開する。
+# 台帳そのものは公開されない（公開されるのは書き出したページだけ）。
+#
+# 準備：
+#   1. 公開用リポジトリの Settings → Secrets and variables → Actions に CATALOG_TOKEN
+#      （research-catalog だけを対象にした Fine-grained token、Contents: Read-only）
+#   2. Settings → Pages → Source を「GitHub Actions」
+name: pages
+on:
+  workflow_dispatch:        # Actions の画面から手動で公開
+  push:
+    branches: [main]        # このリポジトリの main が変わったときも公開し直す
+  schedule:
+    - cron: '0 21 * * *'    # 毎日 日本時間6時に台帳の最新で書き出し直す
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ikemotoatsuya-business/research-catalog
+          token: ${{ secrets.CATALOG_TOKEN }}
+          path: catalog
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python catalog/scripts/build_site.py --out _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
